@@ -23,7 +23,7 @@ export const LOBBY: LobbyEntry[] = [
   { id: "escape-room", title: "Escape Room", blurb: "Crack the code with times tables", comingSoon: false },
   { id: "two-truths", title: "Two Truths and a Lie", blurb: "Spot which fact is fake", comingSoon: false },
   { id: "scratch", title: "Scratch", blurb: "Coming soon", comingSoon: true },
-  { id: "bingo", title: "Bingo", blurb: "Coming soon", comingSoon: true },
+  { id: "bingo", title: "Bingo", blurb: "Answer clues to mark squares and get five in a row", comingSoon: false },
 ];
 
 export type GamePhase = "instructions" | "playing" | "result";

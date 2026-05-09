@@ -7,6 +7,7 @@ import { ImposterGame } from "./games/ImposterGame";
 import { TenSecondGame } from "./games/TenSecondGame";
 import { EscapeRoomGame } from "./games/EscapeRoomGame";
 import { TwoTruthsGame } from "./games/TwoTruthsGame";
+import { BingoGame } from "./games/BingoGame";
 
 type Screen = "login" | "signup" | "chat" | "games";
 
@@ -484,6 +485,7 @@ function GamesView({ onLogout, onGoChat }: { onLogout: () => void; onGoChat: () 
         {selected === "ten-second" && <TenSecondGame onExit={exit} />}
         {selected === "escape-room" && <EscapeRoomGame onExit={exit} />}
         {selected === "two-truths" && <TwoTruthsGame onExit={exit} />}
+        {selected === "bingo" && <BingoGame onExit={exit} />}
       </div>
     </div>
   );
