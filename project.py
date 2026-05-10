@@ -60,7 +60,7 @@ Strict formatting rules:
 Style rules:
 
 1. Keep answers short and clear
-2. Use examples when helpful
+2. Use examples when helpful and use images when helpful
 3. Sound like a kind and patient teacher
 
 Always focus on helping the student understand and improve.
@@ -150,6 +150,15 @@ def get_user_history(user_id):
     if user_id not in chat_memory:
         chat_memory[user_id] = []
     return chat_memory[user_id]
+
+class ChatResetRequest(BaseModel):
+    user_id: str
+
+@app.post("/chat/reset")
+def reset_chat_history(req: ChatResetRequest):
+    """Clear saved turns for this user so the tutor starts with no memory of prior messages."""
+    chat_memory.pop(req.user_id, None)
+    return {"ok": True}
 
 @app.post("/chat")
 async def chat(req:ChatRequest):

@@ -50,6 +50,16 @@ export async function sendChat(userId: string, query: string): Promise<{ respons
   return res.json();
 }
 
+/** Clears server-side conversation memory for this user (new chat thread). */
+export async function resetChatHistory(userId: string): Promise<void> {
+  const res = await fetch(`${base}/chat/reset`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
 export async function fetchProfile(
   userId: string
 ): Promise<{ username?: string; email?: string } | null> {

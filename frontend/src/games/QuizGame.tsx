@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { GameShell, Instructions } from "./GameShell";
+import { playGameSound } from "./gameSounds";
 import { QUIZ_GENERAL, QUIZ_MATHS, type QuizQuestion } from "./data";
 
 type Subject = "general" | "maths";
@@ -54,7 +55,10 @@ export function QuizGame({ onExit }: { onExit: () => void }) {
   function pickOption(i: number) {
     if (picked !== null) return;
     setPicked(i);
-    if (current && i === current.correctIndex) setScore((n) => n + 1);
+    if (current && i === current.correctIndex) {
+      playGameSound("correct");
+      setScore((n) => n + 1);
+    } else playGameSound("wrong");
   }
 
   function next() {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchProfile, logIn, sendChat, signUp } from "./api";
+import { fetchProfile, logIn, resetChatHistory, sendChat, signUp } from "./api";
 import { LOBBY, type GameId } from "./games/types";
 import { HangmanGame } from "./games/HangmanGame";
 import { QuizGame } from "./games/QuizGame";
@@ -8,6 +8,7 @@ import { TenSecondGame } from "./games/TenSecondGame";
 import { EscapeRoomGame } from "./games/EscapeRoomGame";
 import { TwoTruthsGame } from "./games/TwoTruthsGame";
 import { BingoGame } from "./games/BingoGame";
+import { StudyBuddyRobot } from "./StudyBuddyRobot";
 
 type Screen = "login" | "signup" | "chat" | "games";
 
@@ -45,21 +46,11 @@ function clearSession() {
   localStorage.removeItem(SESSION_KEY);
 }
 
-function BookMascot() {
-  return (
-    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden>
-      <rect x="6" y="8" width="28" height="24" rx="4" fill="#c084fc" />
-      <path d="M20 8v24" stroke="#fff5fb" strokeWidth="2" opacity="0.55" />
-      <rect x="10" y="14" width="7" height="3" rx="1" fill="#f9a8d4" />
-      <rect x="10" y="20" width="10" height="2" rx="1" fill="#fff5fb" opacity="0.95" />
-    </svg>
-  );
-}
-
 export default function App() {
   const [screen, setScreen] = useState<Screen>("login");
   const [session, setSession] = useState<Session | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   useEffect(() => {
     const s = loadSession();
@@ -76,11 +67,19 @@ export default function App() {
     setScreen("chat");
   }, []);
 
-  const handleLogout = useCallback(() => {
+  const handleLogout = useCallback(async () => {
+    if (session?.userId) {
+      try {
+        await resetChatHistory(session.userId);
+      } catch {
+        /* still sign out locally */
+      }
+    }
     clearSession();
     setSession(null);
+    setChatMessages([]);
     setScreen("login");
-  }, []);
+  }, [session]);
 
   if (!hydrated) {
     return (
@@ -107,7 +106,13 @@ export default function App() {
         />
       )}
       {screen === "chat" && session && (
-        <ChatView session={session} onLogout={handleLogout} onGoGames={() => setScreen("games")} />
+        <ChatView
+          session={session}
+          messages={chatMessages}
+          setMessages={setChatMessages}
+          onLogout={handleLogout}
+          onGoGames={() => setScreen("games")}
+        />
       )}
       {screen === "games" && session && (
         <GamesView onLogout={handleLogout} onGoChat={() => setScreen("chat")} />
@@ -153,8 +158,8 @@ function LoginView({
     <div className="auth-layout">
       <div className="auth-card">
         <div className="auth-mascot">
-          <div className="auth-mascot-icon">
-            <BookMascot />
+          <div className="auth-mascot-icon auth-with-robo">
+            <StudyBuddyRobot variant="compact" />
           </div>
           <h1 className="auth-title">Welcome <span className="title-accent">back</span></h1>
           <p className="auth-sub">Sign in to chat with your study buddy. We keep things calm and helpful.</p>
@@ -238,8 +243,8 @@ function SignupView({
     <div className="auth-layout">
       <div className="auth-card">
         <div className="auth-mascot">
-          <div className="auth-mascot-icon">
-            <BookMascot />
+          <div className="auth-mascot-icon auth-with-robo">
+            <StudyBuddyRobot variant="compact" />
           </div>
           <h1 className="auth-title">Join Study <span className="title-accent">Buddy</span></h1>
           <p className="auth-sub">Pick a username your teacher or parent will recognize. Big buttons, simple steps.</p>
@@ -298,8 +303,19 @@ function SignupView({
   );
 }
 
-function ChatView({ session, onLogout, onGoGames }: { session: Session; onLogout: () => void; onGoGames: () => void }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+function ChatView({
+  session,
+  messages,
+  setMessages,
+  onLogout,
+  onGoGames,
+}: {
+  session: Session;
+  messages: ChatMessage[];
+  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  onLogout: () => void;
+  onGoGames: () => void;
+}) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -354,12 +370,28 @@ function ChatView({ session, onLogout, onGoGames }: { session: Session; onLogout
     }
   }
 
+  async function handleResetChat() {
+    if (sending) return;
+    if (messages.length === 0 && !input.trim()) return;
+    if (!window.confirm("Clear all messages in this chat?")) return;
+    if (!window.confirm("Are you sure? Your chat history will be removed.")) return;
+    try {
+      await resetChatHistory(session.userId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reset chat. Try again.");
+      return;
+    }
+    setMessages([]);
+    setInput("");
+    setError(null);
+  }
+
   return (
     <div className="chat-page">
       <header className="chat-header">
         <div className="chat-brand">
           <div className="chat-brand-badge" aria-hidden>
-            SB
+            <StudyBuddyRobot variant="compact" className="chat-brand-badge-robot" />
           </div>
           <div className="chat-brand-text">
             <h1>Study <span className="title-accent">Buddy</span></h1>
@@ -367,6 +399,15 @@ function ChatView({ session, onLogout, onGoGames }: { session: Session; onLogout
           </div>
         </div>
         <div className="chat-header-buttons">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={handleResetChat}
+            disabled={sending || (messages.length === 0 && !input.trim())}
+            title={messages.length === 0 ? "Nothing to clear yet" : "Clear chat history"}
+          >
+            Reset chat
+          </button>
           <button type="button" className="btn btn-ghost" onClick={onGoGames}>
             Games
           </button>
@@ -381,13 +422,20 @@ function ChatView({ session, onLogout, onGoGames }: { session: Session; onLogout
           {messages.length === 0 ? greeting : null}
           {messages.map((msg) => (
             <div key={msg.id} className={`msg ${msg.role === "user" ? "msg-user" : "msg-assistant"}`}>
-              <div className="msg-meta">{msg.role === "user" ? "You" : "Study Buddy"}</div>
+              <div className="msg-msg-head">
+                <div className="msg-meta">{msg.role === "user" ? "You" : "Study Buddy"}</div>
+              </div>
               {msg.content}
             </div>
           ))}
           {sending && (
-            <div className="msg msg-assistant" aria-live="polite">
-              <div className="msg-meta">Study Buddy</div>
+            <div className="msg msg-assistant msg-buddy-chatting" aria-live="polite">
+              <div className="msg-msg-head">
+                <span className="chat-msg-robot chat-msg-robot-speaking" aria-hidden>
+                  <StudyBuddyRobot variant="default" />
+                </span>
+                <div className="msg-meta">Study Buddy</div>
+              </div>
               <span className="typing-dots" aria-label="Thinking">
                 <span />
                 <span />
@@ -439,17 +487,17 @@ function GamesView({ onLogout, onGoChat }: { onLogout: () => void; onGoChat: () 
 
   return (
     <div className="games-page">
-      <header className="games-header">
-        <div className="games-brand">
-          <div className="games-brand-badge" aria-hidden>
-            SB
+      <header className="chat-header">
+        <div className="chat-brand">
+          <div className="chat-brand-badge" aria-hidden>
+            <StudyBuddyRobot variant="compact" className="chat-brand-badge-robot" />
           </div>
-          <div className="games-brand-text">
+          <div className="chat-brand-text">
             <h1>Study <span className="title-accent">Games</span></h1>
             <p>Fun ways to learn and practice</p>
           </div>
         </div>
-        <div className="games-header-buttons">
+        <div className="chat-header-buttons">
           <button type="button" className="btn btn-ghost" onClick={onGoChat}>
             Chat
           </button>

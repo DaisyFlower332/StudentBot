@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BINGO_MATHS, BINGO_SCIENCE, BINGO_VOCABULARY, type BingoCellData, type BingoTopicId } from "./data";
 import { GameShell, Instructions } from "./GameShell";
+import { playGameSound } from "./gameSounds";
 
 type Phase = "instructions" | "topic" | "playing" | "won";
+
+type BoardCell = { kind: "free" } | { kind: "answer"; cell: BingoCellData };
+
+const CENTER_IDX = 12;
 
 const STORAGE_KEY = "studentbot_bingo_v1";
 
@@ -63,7 +68,7 @@ function shuffle<T>(arr: T[]): T[] {
   return out;
 }
 
-function pickBoard(pool: BingoCellData[]): BingoCellData[] {
+function pick24Answers(pool: BingoCellData[]): BingoCellData[] {
   const sorted = shuffle(pool);
   const seen = new Set<string>();
   const out: BingoCellData[] = [];
@@ -72,18 +77,39 @@ function pickBoard(pool: BingoCellData[]): BingoCellData[] {
     if (seen.has(k)) continue;
     seen.add(k);
     out.push(cell);
-    if (out.length >= 25) break;
+    if (out.length >= 24) break;
   }
-  return out.slice(0, 25);
+  return out.slice(0, 24);
 }
 
-function randomPickUnmarked(marked: boolean[], avoid: number | null = null): number | null {
+function buildBoard(pool: BingoCellData[]): BoardCell[] {
+  const picked = pick24Answers(pool);
+  const cells: BingoCellData[] = picked.slice(0, 24);
+  const out: BoardCell[] = [];
+  let ai = 0;
+  for (let i = 0; i < 25; i++) {
+    if (i === CENTER_IDX) out.push({ kind: "free" });
+    else out.push({ kind: "answer", cell: cells[ai++]! });
+  }
+  return out;
+}
+
+function randomAnswerIndex(board: BoardCell[]): number {
+  const ok: number[] = [];
+  for (let i = 0; i < 25; i++) if (board[i]?.kind === "answer") ok.push(i);
+  return ok[Math.floor(Math.random() * ok.length)]!;
+}
+
+function randomPickUnmarked(marked: boolean[], board: BoardCell[], avoid: number | null = null): number | null {
   const free = Array.from({ length: 25 }, (_, i) => i).filter(
-    (i) => !marked[i] && (avoid === null || i !== avoid)
+    (i) =>
+      board[i]?.kind === "answer" &&
+      !marked[i] &&
+      (avoid === null || i !== avoid)
   );
-  if (free.length > 0) return free[Math.floor(Math.random() * free.length)];
+  if (free.length > 0) return free[Math.floor(Math.random() * free.length)]!;
   if (avoid === null) return null;
-  return randomPickUnmarked(marked, null);
+  return randomPickUnmarked(marked, board, null);
 }
 
 function hasWinningLine(marked: boolean[]): boolean {
@@ -101,7 +127,7 @@ export function BingoGame({ onExit }: { onExit: () => void }) {
   const [phase, setPhase] = useState<Phase>("instructions");
   const [stats, setStats] = useState<StoredStats>(loadStats);
   const [topic, setTopic] = useState<BingoTopicId>("vocabulary");
-  const [cells, setCells] = useState<BingoCellData[]>([]);
+  const [board, setBoard] = useState<BoardCell[]>([]);
   const [marked, setMarked] = useState<boolean[]>(() => Array(25).fill(false));
   const [targetIndex, setTargetIndex] = useState<number | null>(null);
   const [flashWrong, setFlashWrong] = useState<number | null>(null);
@@ -121,11 +147,12 @@ export function BingoGame({ onExit }: { onExit: () => void }) {
   const chooseTopic = (tid: BingoTopicId) => {
     setTopic(tid);
     const pool = TOPICS.find((x) => x.id === tid)!.pool;
-    const board = pickBoard(pool);
-    setCells(board);
-    setMarked(Array(25).fill(false));
-    const first = Math.floor(Math.random() * 25);
-    setTargetIndex(first);
+    const b = buildBoard(pool);
+    setBoard(b);
+    const m = Array(25).fill(false);
+    m[CENTER_IDX] = true;
+    setMarked(m);
+    setTargetIndex(randomAnswerIndex(b));
     setFlashWrong(null);
     setElapsed(0);
     startRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -159,11 +186,16 @@ export function BingoGame({ onExit }: { onExit: () => void }) {
     setPhase("won");
   }, [topic]);
 
+  const boardRef = useRef(board);
+  boardRef.current = board;
+
   const onSquareClick = (index: number) => {
     if (phase !== "playing" || targetIndex === null) return;
+    if (board[index]?.kind === "free") return;
     if (marked[index]) return;
 
     if (index === targetIndex) {
+      playGameSound("correct");
       setMarked((m) => {
         const next = [...m];
         next[index] = true;
@@ -172,16 +204,17 @@ export function BingoGame({ onExit }: { onExit: () => void }) {
           const sec = (now - startRef.current) / 1000;
           queueMicrotask(() => finalizeWin(sec));
         } else {
-          const n = randomPickUnmarked(next, null);
+          const n = randomPickUnmarked(next, boardRef.current, null);
           setTargetIndex(n);
         }
         return next;
       });
       setFlashWrong(null);
     } else {
+      playGameSound("wrong");
       setFlashWrong(index);
       window.setTimeout(() => setFlashWrong((f) => (f === index ? null : f)), 450);
-      const n = randomPickUnmarked(marked, targetIndex);
+      const n = randomPickUnmarked(marked, boardRef.current, targetIndex);
       setTargetIndex(n);
     }
   };
@@ -192,17 +225,20 @@ export function BingoGame({ onExit }: { onExit: () => void }) {
   const winsForTopic = stats[topic].wins;
   const lastWin = phase === "won" ? lastWinRef.current : null;
 
+  const currentClue =
+    targetIndex !== null && board[targetIndex]?.kind === "answer" ? board[targetIndex].cell.clue : "";
+
   return (
     <GameShell title="Bingo" onExit={onExit} headline={headline}>
       {phase === "instructions" && (
         <Instructions
           title="How to play Bingo"
           bullets={[
-            "You'll see a 5 by 5 grid. Each square has a short answer on it.",
-            "Read the clue at the top. Tap the square that answers the clue.",
-            "Right answer: that square gets a mark. Wrong: we move straight to the next clue.",
-            "Get five marks in a row, column, or diagonal to win.",
-            "We'll time you — try to beat your best time! After Start, choose Vocabulary, Maths, or Science.",
+            "You'll see a 5 by 5 grid. The centre square is FREE — it's already counted as marked.",
+            "Each other square shows a short answer. Read the clue at the top and tap the matching square.",
+            "Right answer: that square gets a mark. Wrong: we move to the next clue.",
+            "Line up five marks in a row, column, or diagonal to win.",
+            "We'll time you — try to beat your best time! Then choose Vocabulary, Maths, or Science.",
           ]}
           onStart={startTopicPicker}
         />
@@ -230,7 +266,7 @@ export function BingoGame({ onExit }: { onExit: () => void }) {
         </div>
       )}
 
-      {phase === "playing" && targetIndex !== null && cells.length === 25 && (
+      {phase === "playing" && targetIndex !== null && board.length === 25 && (
         <div className="bingo-board-wrap">
           <div className="bingo-meta">
             <div className="bingo-timer-pill" aria-live="polite">
@@ -245,31 +281,39 @@ export function BingoGame({ onExit }: { onExit: () => void }) {
 
           <div className="bingo-clue" role="region" aria-label="Current clue">
             <span className="bingo-clue-label">Clue</span>
-            <p className="bingo-clue-text">{cells[targetIndex]?.clue}</p>
+            <p className="bingo-clue-text">{currentClue}</p>
           </div>
 
           <div className="bingo-grid" role="grid" aria-label="Bingo answers">
-            {cells.map((c, i) => {
+            {board.map((cell, i) => {
               const isMarked = marked[i];
               const isWrongPulse = flashWrong === i;
+              if (cell.kind === "free") {
+                return (
+                  <div key={i} className="bingo-cell is-free" role="gridcell" aria-label="Free space">
+                    <span className="bingo-cell-text">FREE</span>
+                    <span className="bingo-marker" aria-hidden />
+                  </div>
+                );
+              }
               return (
                 <button
-                  key={`${i}-${c.answer}`}
+                  key={`${i}-${cell.cell.answer}`}
                   type="button"
                   role="gridcell"
                   className={`bingo-cell${isMarked ? " is-marked" : ""}${isWrongPulse ? " is-wrong-flash" : ""}`}
                   onClick={() => onSquareClick(i)}
                   disabled={isMarked}
                   aria-pressed={isMarked}
-                  aria-label={isMarked ? `${c.answer}, marked` : c.answer}
+                  aria-label={isMarked ? `${cell.cell.answer}, marked` : cell.cell.answer}
                 >
-                  <span className="bingo-cell-text">{c.answer}</span>
+                  <span className="bingo-cell-text">{cell.cell.answer}</span>
                   {isMarked && <span className="bingo-marker" aria-hidden />}
                 </button>
               );
             })}
           </div>
-          <p className="bingo-hint">Tip: Wrong taps still give you a new clue — keep trying for your line!</p>
+          <p className="bingo-hint">The middle square counts as yours from the start. Wrong taps swap to a new clue.</p>
         </div>
       )}
 
