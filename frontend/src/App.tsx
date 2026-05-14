@@ -8,6 +8,9 @@ import { TenSecondGame } from "./games/TenSecondGame";
 import { EscapeRoomGame } from "./games/EscapeRoomGame";
 import { TwoTruthsGame } from "./games/TwoTruthsGame";
 import { BingoGame } from "./games/BingoGame";
+import { ScratchGame } from "./games/ScratchGame";
+import { MinesweeperGame } from "./games/MinesweeperGame";
+import { NethackGame } from "./games/NethackGame";
 import { StudyBuddyRobot } from "./StudyBuddyRobot";
 
 type Screen = "login" | "signup" | "chat" | "games";
@@ -509,22 +512,37 @@ function GamesView({ onLogout, onGoChat }: { onLogout: () => void; onGoChat: () 
 
       <div className="games-layout">
         {selected === null && (
-          <div className="games-grid">
-            {LOBBY.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                className={`game-card${entry.comingSoon ? " is-coming-soon" : ""}`}
-                onClick={() => !entry.comingSoon && setSelected(entry.id)}
-                disabled={entry.comingSoon}
-                aria-disabled={entry.comingSoon}
-              >
-                {entry.comingSoon && <span className="game-card-badge">Coming soon</span>}
-                <h3>{entry.title}</h3>
-                <p>{entry.blurb}</p>
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="games-welcome">
+              <div className="games-welcome-emojis">🎮 🎯 🧠 ⚡ 🏆</div>
+              <h2 className="games-welcome-title">Game Zone</h2>
+              <p className="games-welcome-sub">Pick a game and start having fun while learning!</p>
+            </div>
+            <div className="games-grid">
+              {LOBBY.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  className={`game-card${entry.comingSoon ? " is-coming-soon" : ""}`}
+                  onClick={() => !entry.comingSoon && setSelected(entry.id)}
+                  disabled={entry.comingSoon}
+                  aria-disabled={entry.comingSoon}
+                  style={{ "--tile-color": entry.color } as React.CSSProperties}
+                >
+                  {entry.comingSoon && <span className="game-card-badge">Coming soon</span>}
+                  <div className="game-card-icon" style={{ background: entry.color }}>
+                    <span className="game-card-emoji">{entry.emoji}</span>
+                    <span className="game-card-mascot">{entry.mascot}</span>
+                  </div>
+                  <div className="game-card-info">
+                    <h3>{entry.title}</h3>
+                    <p>{entry.blurb}</p>
+                  </div>
+                  <span className="game-card-play">▶</span>
+                </button>
+              ))}
+            </div>
+          </>
         )}
 
         {selected === "hangman" && <HangmanGame onExit={exit} />}
@@ -534,6 +552,9 @@ function GamesView({ onLogout, onGoChat }: { onLogout: () => void; onGoChat: () 
         {selected === "escape-room" && <EscapeRoomGame onExit={exit} />}
         {selected === "two-truths" && <TwoTruthsGame onExit={exit} />}
         {selected === "bingo" && <BingoGame onExit={exit} />}
+        {selected === "scratch" && <ScratchGame onExit={exit} />}
+        {selected === "minesweeper" && <MinesweeperGame onExit={exit} />}
+        {selected === "nethack" && <NethackGame onExit={exit} />}
       </div>
     </div>
   );
