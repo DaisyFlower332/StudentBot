@@ -1,6 +1,12 @@
 # Node modules
 node_modules/
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+
 # Environment files
 .env
 .env.local
